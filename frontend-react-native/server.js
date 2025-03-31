@@ -6,8 +6,8 @@ const port = process.env.PORT || 80;
 
 // Proxy API requests to the backend
 app.use('/api', createProxyMiddleware({ 
-  target: 'http://backend:8080/api/v1', 
-  pathRewrite: {'^/api': ''},
+  target: 'http://backend:8080', 
+  pathRewrite: {'^/api': '/api/v1'},
   changeOrigin: true 
 }));
 
