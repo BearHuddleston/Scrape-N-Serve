@@ -73,6 +73,9 @@ export const apiService = {
     order = 'desc'
   ): Promise<DataResponse> => {
     try {
+      console.log('apiService.getScrapedData called with:', { limit, offset, sort, order });
+      console.log('Requesting URL:', `${API_URL}${ENDPOINTS.DATA}`);
+      
       const response = await api.get(ENDPOINTS.DATA, {
         params: {
           limit,
@@ -81,9 +84,14 @@ export const apiService = {
           order,
         },
       });
+      
+      console.log('apiService.getScrapedData raw response:', response);
+      console.log('apiService.getScrapedData data:', response.data);
+      
       return response.data;
     } catch (error) {
       console.error('Error getting scraped data:', error);
+      console.error('Error details:', JSON.stringify(error));
       throw error;
     }
   },

@@ -21,7 +21,6 @@ services:
       dockerfile: Dockerfile
     environment:
       DB_URL: postgres://postgres:postgres@db:5432/scrape_n_serve
-      TARGET_WEBSITE: https://example.com
     depends_on:
       db:
         condition: service_healthy
@@ -31,14 +30,14 @@ services:
     
   frontend:
     build:
-      context: ./frontend
+      context: ./frontend-react-native
       dockerfile: Dockerfile
     ports:
       - "80:80"
     depends_on:
       - backend
     environment:
-      - REACT_APP_API_URL=http://localhost:8080
+      - NODE_ENV=production
     restart: unless-stopped
 
 volumes:
