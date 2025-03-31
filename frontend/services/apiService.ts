@@ -44,40 +44,6 @@ export interface DataStats {
 // Use the v1 API prefix
 const API_PREFIX = '/api/v1';
 
-// Helper function for API requests
-async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
-  try {
-    const fullUrl = `${API_BASE_URL}${API_PREFIX}${endpoint}`;
-    console.log(`Making request to: ${fullUrl}`);
-    
-    const response = await fetch(fullUrl, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      ...options,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`API error (${response.status}): ${errorText}`);
-      return {
-        status: 'error',
-        message: `Server responded with status: ${response.status}`,
-      };
-    }
-
-    const data = await response.json();
-    return data as ApiResponse<T>;
-  } catch (error) {
-    console.error('API request failed:', error);
-    return {
-      status: 'error',
-      message: 'Network request failed',
-    };
-  }
-}
-
 // Trigger scraping process
 export async function triggerScraping(url: string, maxDepth?: number): Promise<ApiResponse> {
   const options: ScrapingOptions = { url };
@@ -132,10 +98,27 @@ export async function getScrapingStats(): Promise<ApiResponse<DataStats>> {
 
 // Fallback to old API endpoints for compatibility
 export async function legacyTriggerScraping(url: string): Promise<ApiResponse> {
-  return apiRequest('/scrape', {
-    method: 'POST',
-    body: JSON.stringify({ url }),
-  }, true);
+  const fullUrl = `${API_BASE_URL}/scrape`;
+  
+  try {
+    const response = await fetch(fullUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    const data = await response.json();
+    return data as ApiResponse;
+  } catch (error) {
+    console.error('Legacy API request failed:', error);
+    return {
+      status: 'error',
+      message: 'Network request failed',
+    };
+  }
 }
 
 // Helper function with optional API prefix override
