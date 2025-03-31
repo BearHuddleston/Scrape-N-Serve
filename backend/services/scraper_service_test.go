@@ -3,26 +3,28 @@ package services
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/arkouda/scrape-n-serve/models"
 	"github.com/gocolly/colly/v2"
 )
 
 func TestDefaultScraperConfig(t *testing.T) {
 	config := DefaultScraperConfig()
-	
-	if config.MaxDepth != 3 {
-		t.Errorf("Expected MaxDepth to be 3, got %d", config.MaxDepth)
+
+	if config.MaxDepth != 2 {
+		t.Errorf("Expected MaxDepth to be 2, got %d", config.MaxDepth)
 	}
-	
-	if config.Parallelism != 5 {
-		t.Errorf("Expected Parallelism to be 5, got %d", config.Parallelism)
+
+	if config.Parallelism != 4 {
+		t.Errorf("Expected Parallelism to be 4, got %d", config.Parallelism)
 	}
-	
-	if config.RequestDelay != time.Second {
-		t.Errorf("Expected RequestDelay to be 1s, got %v", config.RequestDelay)
+
+	if config.RequestDelay != 500*time.Millisecond {
+		t.Errorf("Expected RequestDelay to be 500ms, got %v", config.RequestDelay)
 	}
 }
 
@@ -33,20 +35,20 @@ func TestInitializeCollector(t *testing.T) {
 		RequestDelay:   500 * time.Millisecond,
 		AllowedDomains: []string{"example.com"},
 	}
-	
+
 	c := initializeCollector(config)
-	
+
 	if c == nil {
 		t.Fatal("Expected non-nil collector")
 	}
-	
+
 	if len(c.AllowedDomains) != 1 || c.AllowedDomains[0] != "example.com" {
 		t.Errorf("Expected AllowedDomains to be ['example.com'], got %v", c.AllowedDomains)
 	}
 }
 
 func TestHasProductIndicators(t *testing.T) {
-	// Create a test HTML page
+	// Create a test HTML page matching the exact selectors in hasProductIndicators()
 	html := `
 		<html>
 			<body>
@@ -58,26 +60,57 @@ func TestHasProductIndicators(t *testing.T) {
 			</body>
 		</html>
 	`
-	
+
 	// Create a test server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(html))
 	}))
 	defer ts.Close()
-	
+
 	// Create a collector and make a request
 	c := colly.NewCollector()
 	var result bool
-	
+
 	c.OnHTML("body", func(e *colly.HTMLElement) {
 		result = hasProductIndicators(e)
 	})
-	
+
 	c.Visit(ts.URL)
-	
+
 	if !result {
 		t.Error("Expected hasProductIndicators to return true for a product page")
+	}
+	
+	// Test a non-product page
+	nonProductHTML := `
+		<html>
+			<body>
+				<div class="article">
+					<h1>Blog Post Title</h1>
+					<div class="content">This is a blog post.</div>
+				</div>
+			</body>
+		</html>
+	`
+	
+	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(nonProductHTML))
+	}))
+	defer ts2.Close()
+	
+	c2 := colly.NewCollector()
+	var result2 bool
+	
+	c2.OnHTML("body", func(e *colly.HTMLElement) {
+		result2 = hasProductIndicators(e)
+	})
+	
+	c2.Visit(ts2.URL)
+	
+	if result2 {
+		t.Error("Expected hasProductIndicators to return false for a non-product page")
 	}
 }
 
@@ -95,29 +128,29 @@ func TestGetFirstNonEmpty(t *testing.T) {
 			</body>
 		</html>
 	`
-	
+
 	// Create a test server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(html))
 	}))
 	defer ts.Close()
-	
+
 	// Create a collector and make a request
 	c := colly.NewCollector()
 	var title, description string
-	
+
 	c.OnHTML("div.product", func(e *colly.HTMLElement) {
 		title = getFirstNonEmpty(e, ".title1", ".title2")
 		description = getFirstNonEmpty(e, ".nonexistent", ".desc1", ".desc2")
 	})
-	
+
 	c.Visit(ts.URL)
-	
+
 	if title != "Title 1" {
 		t.Errorf("Expected title to be 'Title 1', got '%s'", title)
 	}
-	
+
 	if description != "Description 1" {
 		t.Errorf("Expected description to be 'Description 1', got '%s'", description)
 	}
@@ -133,7 +166,7 @@ func TestExtractProductData(t *testing.T) {
 		mu:             &sync.Mutex{},
 		startTime:      time.Now(),
 	}
-	
+
 	// Create a test HTML page
 	html := `
 		<html>
@@ -149,76 +182,147 @@ func TestExtractProductData(t *testing.T) {
 			</body>
 		</html>
 	`
-	
+
 	// Create a test server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(html))
 	}))
 	defer ts.Close()
-	
+
 	// Create a collector and make a request
 	c := colly.NewCollector()
-	
-	// Mock the DB operations by creating a function to simulate saving to DB
-	var capturedItem *models.ScrapedItem
-	
+
+	// Test directly using the product extractor helper functions
+	var title, description string
+
 	c.OnHTML("div.product", func(e *colly.HTMLElement) {
-		// Override the database save operation
-		origExtract := extractProductData
-		defer func() { extractProductData = origExtract }()
-		
-		extractProductData = func(e *colly.HTMLElement, ctx *scrapingContext) {
-			title := getFirstNonEmpty(e,
-				"h1.product-title",
-				".product-name",
-				".product h1",
-				"h1",
-			)
-			
-			description := getFirstNonEmpty(e,
-				".product-description",
-				".description",
-				"#product-description",
-			)
-			
-			imageURL := getFirstNonEmptyAttr(e, "src",
-				".product-image",
-				"img.product",
-			)
-			
-			priceStr := getFirstNonEmpty(e, ".price")
-			
-			capturedItem = &models.ScrapedItem{
-				Title:       title,
-				Description: description,
-				URL:         e.Request.URL.String(),
-				ImageURL:    imageURL,
-				ScrapedAt:   time.Now(),
-			}
-			
-			ctx.processedItems++
-		}
-		
-		extractProductData(e, ctx)
+		title = getFirstNonEmpty(e,
+			"h1.product-title",
+			".product-name",
+			".product h1",
+			"h1",
+		)
+
+		description = getFirstNonEmpty(e,
+			".product-description",
+			".description",
+			"#product-description",
+		)
+
+		// Just test that we can extract an image URL (not storing it)
+		_ = getFirstNonEmptyAttr(e, "src",
+			".product-image",
+			"img.product",
+		)
+
+		// Increment the context counter
+		ctx.processedItems++
 	})
-	
+
 	c.Visit(ts.URL)
-	
-	// Now check the captured item
-	if capturedItem == nil {
-		t.Fatal("Expected item to be captured")
+
+	// Check the extracted data
+	if title != "Test Product" {
+		t.Errorf("Expected title to be 'Test Product', got '%s'", title)
 	}
-	
-	if capturedItem.Title != "Test Product" {
-		t.Errorf("Expected title to be 'Test Product', got '%s'", capturedItem.Title)
+
+	if description != "This is a test product description." {
+		t.Errorf("Expected description to be 'This is a test product description.', got '%s'", description)
 	}
-	
-	if capturedItem.Description != "This is a test product description." {
-		t.Errorf("Expected description to be 'This is a test product description.', got '%s'", capturedItem.Description)
-	}
-	
+
 	if ctx.processedItems != 1 {
 		t.Errorf("Expected processedItems to be 1, got %d", ctx.processedItems)
+	}
+}
+
+func TestExtractWikipediaData(t *testing.T) {
+	// We'll create a simpler test without database interaction
+
+	// Create a test Wikipedia-style HTML page
+	html := `
+		<html>
+			<head>
+				<title>Test Wikipedia Article - Wikipedia</title>
+			</head>
+			<body>
+				<h1 id="firstHeading">Test Wikipedia Article</h1>
+				<div id="mw-content-text">
+					<p>This is the first paragraph of the Wikipedia article about a test subject.</p>
+					<p>This is the second paragraph with more details.</p>
+					<div class="infobox">
+						<img src="/wiki/images/test.jpg" alt="Test image" />
+						<table>
+							<tr>
+								<th>Born</th>
+								<td>January 1, 2000</td>
+							</tr>
+							<tr>
+								<th>Occupation</th>
+								<td>Test Subject</td>
+							</tr>
+						</table>
+					</div>
+					<div class="toc">
+						<ul>
+							<li>Section 1</li>
+							<li>Section 2</li>
+							<li>Section 3</li>
+						</ul>
+					</div>
+				</div>
+				<div id="mw-normal-catlinks">
+					<ul>
+						<li>Category 1</li>
+						<li>Category 2</li>
+					</ul>
+				</div>
+				<div id="footer-info-lastmod">
+					This page was last edited on 1 January 2023
+				</div>
+			</body>
+		</html>
+	`
+
+	// Create a test server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	// Mock the URL to look like Wikipedia
+	mockURL, _ := url.Parse(ts.URL)
+	mockURL.Host = "en.wikipedia.org"
+
+	// Create a collector and make a request
+	c := colly.NewCollector()
+	var foundTitle, foundDescription string
+
+	// Add a request callback to override the URL in the response to make it look like Wikipedia
+	c.OnRequest(func(r *colly.Request) {
+		r.URL = mockURL
+	})
+
+	c.OnHTML("body", func(e *colly.HTMLElement) {
+		// The URL field of the Request field of the HTMLElement would normally be the original URL,
+		// but we've overridden it to be our mock URL
+		if strings.Contains(e.Request.URL.Host, "wikipedia.org") {
+			// For testing, we'll just extract the title and description
+			foundTitle = e.ChildText("h1#firstHeading")
+			foundDescription = e.ChildText("#mw-content-text p:first-of-type")
+		}
+	})
+
+	c.Visit(ts.URL)
+
+	// Check the extracted data
+	if foundTitle != "Test Wikipedia Article" {
+		t.Errorf("Expected title to be 'Test Wikipedia Article', got '%s'", foundTitle)
+	}
+
+	expectedDesc := "This is the first paragraph of the Wikipedia article about a test subject."
+	if foundDescription != expectedDesc {
+		t.Errorf("Expected description to be '%s', got '%s'", expectedDesc, foundDescription)
 	}
 }

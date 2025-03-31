@@ -6,10 +6,55 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/arkouda/scrape-n-serve/db"
+	"github.com/arkouda/scrape-n-serve/models"
+	"github.com/arkouda/scrape-n-serve/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+// setupTestDB initializes an in-memory SQLite database for testing
+func setupTestDB() {
+	var err error
+	// Use in-memory SQLite for testing
+	db.DB, err = gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		panic("Failed to connect to test database: " + err.Error())
+	}
+	
+	// Migrate the schema
+	db.DB.AutoMigrate(&models.ScrapedItem{})
+	
+	// Add some test data
+	testItems := []models.ScrapedItem{
+		{
+			Title:       "Test Item 1",
+			Description: "This is a test item description",
+			URL:         "https://example.com/item1",
+			ImageURL:    "https://example.com/images/item1.jpg",
+			Price:       19.99,
+			ScrapedAt:   time.Now(),
+			Metadata:    `{"category": "Test Category"}`,
+		},
+		{
+			Title:       "Test Item 2",
+			Description: "Another test item description",
+			URL:         "https://example.com/item2",
+			ImageURL:    "https://example.com/images/item2.jpg",
+			Price:       29.99,
+			ScrapedAt:   time.Now().Add(-time.Hour),
+			Metadata:    `{"category": "Another Category"}`,
+		},
+	}
+	
+	for _, item := range testItems {
+		db.DB.Create(&item)
+	}
+}
 
 func setupRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -22,6 +67,14 @@ func setupRouter() *gin.Engine {
 	r.GET("/api/v1/data/:id", GetItemById)
 	
 	return r
+}
+
+func TestMain(m *testing.M) {
+	// Setup test database before running tests
+	setupTestDB()
+	
+	// Run tests
+	m.Run()
 }
 
 func TestStartScrapingWithoutURL(t *testing.T) {
@@ -55,6 +108,37 @@ func TestStartScrapingWithURL(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/api/v1/scrape", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	
+	w := httptest.NewRecorder()
+	
+	// Perform the request
+	router.ServeHTTP(w, req)
+	
+	// Check response - should be Accepted since it's async
+	assert.Equal(t, http.StatusAccepted, w.Code)
+	
+	// Parse response
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	
+	assert.Nil(t, err)
+	assert.Equal(t, "success", response["status"])
+	assert.Equal(t, "Scraping started", response["message"])
+	assert.Equal(t, "https://example.com", response["url"])
+}
+
+func TestStartScrapingWithURLQueryParam(t *testing.T) {
+	// We need to create a new router for each test to ensure a clean state
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	
+	// Setup routes just for this test
+	router.POST("/api/v1/scrape", StartScraping)
+	
+	// Reset the scraping state for this test
+	services.ResetScrapingState()
+	
+	// Create a request with URL as query parameter
+	req, _ := http.NewRequest("POST", "/api/v1/scrape?url=https://example.com&max_depth=3", nil)
 	w := httptest.NewRecorder()
 	
 	// Perform the request

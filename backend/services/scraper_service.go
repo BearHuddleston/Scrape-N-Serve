@@ -19,7 +19,7 @@ import (
 var (
 	scraping       bool
 	scrapingMutex  sync.Mutex
-	scrapeComplete chan bool
+	scrapeComplete chan bool = make(chan bool, 1)
 )
 
 // ScraperConfig represents configuration options for the scraper
@@ -36,16 +36,16 @@ type ScraperConfig struct {
 // DefaultScraperConfig returns the default scraper configuration
 func DefaultScraperConfig() ScraperConfig {
 	return ScraperConfig{
-		MaxDepth:        3,
-		Parallelism:     5,
-		RequestDelay:    time.Second,
+		MaxDepth:        2,       // Reduce default depth to avoid scraping too many pages
+		Parallelism:     4,       // Reduce parallelism to avoid overloading sites
+		RequestDelay:    500 * time.Millisecond,
 		RequestTimeout:  10 * time.Second,
 		FollowRedirects: true,
 	}
 }
 
 // StartScraping initiates the web scraping process
-func StartScraping(targetURL string) (bool, error) {
+func StartScraping(targetURL string, maxDepth int) (bool, error) {
 	// Use mutex to prevent multiple scraping processes
 	scrapingMutex.Lock()
 	if scraping {
@@ -54,8 +54,6 @@ func StartScraping(targetURL string) (bool, error) {
 	}
 	scraping = true
 	scrapingMutex.Unlock()
-	
-	scrapeComplete = make(chan bool, 1)
 	
 	// Ensure we mark scraping as complete when we're done
 	defer func() {
@@ -72,7 +70,18 @@ func StartScraping(targetURL string) (bool, error) {
 	
 	domain := parsedURL.Hostname()
 	config := DefaultScraperConfig()
-	config.AllowedDomains = []string{domain}
+	
+	// Override max depth if provided
+	if maxDepth > 0 {
+		config.MaxDepth = maxDepth
+	}
+	
+	// For Wikipedia, we don't restrict to just the hostname to allow following links to other language editions
+	if strings.Contains(domain, "wikipedia.org") {
+		config.AllowedDomains = []string{"wikipedia.org", "en.wikipedia.org", "www.wikipedia.org"}
+	} else {
+		config.AllowedDomains = []string{domain}
+	}
 	
 	// Initialize the collector with the domain
 	c := initializeCollector(config)
@@ -115,7 +124,16 @@ func StartScraping(targetURL string) (bool, error) {
 
 	elapsed := time.Since(ctx.startTime)
 	log.Printf("Scraping complete. Processed %d items in %v.", ctx.processedItems, elapsed)
-	scrapeComplete <- true
+	
+	// Non-blocking send to channel
+	select {
+	case scrapeComplete <- true:
+		// Successfully sent to channel
+	default:
+		// Channel is full or unavailable, just log it
+		log.Printf("Could not send to scrapeComplete channel")
+	}
+	
 	return true, nil
 }
 
@@ -168,6 +186,14 @@ func setupProductPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 	c.OnHTML("div.product, div.product-detail, div.item", func(e *colly.HTMLElement) {
 		extractProductData(e, ctx)
 	})
+	
+	// Add Wikipedia-specific selectors
+	c.OnHTML("body", func(e *colly.HTMLElement) {
+		// If it's a Wikipedia page, extract data using Wikipedia-specific logic
+		if strings.Contains(e.Request.URL.Host, "wikipedia.org") {
+			extractWikipediaData(e, ctx)
+		}
+	})
 }
 
 // setupListingPageCallbacks sets up callbacks for listing/category pages
@@ -194,13 +220,38 @@ func setupListingPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 			}
 		}
 	})
+	
+	// Handle Wikipedia links
+	c.OnHTML(".mw-parser-output a[href]", func(e *colly.HTMLElement) {
+		href := e.Attr("href")
+		// Only follow internal Wikipedia links that don't start with # (anchors), : (special pages), or / (root paths)
+		if strings.HasPrefix(href, "/wiki/") && 
+		   !strings.Contains(href, ":") && 
+		   !strings.HasPrefix(href, "#") {
+			linkURL := e.Request.AbsoluteURL(href)
+			ctx.mu.Lock()
+			if !ctx.visitedURLs[linkURL] {
+				ctx.visitedURLs[linkURL] = true
+				ctx.mu.Unlock()
+				e.Request.Visit(linkURL)
+			} else {
+				ctx.mu.Unlock()
+			}
+		}
+	})
 }
 
 // setupGenericPageCallbacks sets up callbacks for generic pages
 func setupGenericPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 	// Try to detect product information on any page
 	c.OnHTML("body", func(e *colly.HTMLElement) {
-		// Check for common product page indicators
+		// Check if it's a Wikipedia page first
+		if strings.Contains(e.Request.URL.Host, "wikipedia.org") {
+			extractWikipediaData(e, ctx)
+			return
+		}
+		
+		// For non-Wikipedia pages, check for common product page indicators
 		if hasProductIndicators(e) {
 			extractProductData(e, ctx)
 		}
@@ -215,6 +266,91 @@ func hasProductIndicators(e *colly.HTMLElement) bool {
 	hasProductTitle := e.DOM.Find("h1.product-title, .product-name, .product h1").Length() > 0
 	
 	return hasPriceElement && (hasAddToCartButton || hasProductTitle)
+}
+
+// extractWikipediaData extracts content from Wikipedia pages
+func extractWikipediaData(e *colly.HTMLElement, ctx *scrapingContext) {
+	// Get the title of the Wikipedia article
+	title := e.ChildText("h1#firstHeading")
+	if title == "" {
+		title = e.ChildText("h1.firstHeading")
+	}
+	
+	// Get URL from the current page
+	url := e.Request.URL.String()
+	
+	// Get description from the first paragraph
+	description := e.ChildText("#mw-content-text p:first-of-type")
+	
+	// Get the first image
+	imageURL := e.ChildAttr(".infobox img, .thumbimage, img.mw-headline-anchor", "src")
+	imageURL = e.Request.AbsoluteURL(imageURL)
+	
+	// If no image found in those selectors, try to find any image
+	if imageURL == "" {
+		imageURL = e.ChildAttr("img", "src")
+		imageURL = e.Request.AbsoluteURL(imageURL)
+	}
+	
+	// Gather metadata
+	metadata := map[string]string{
+		"categories": strings.Join(e.ChildTexts("#mw-normal-catlinks li"), ", "),
+		"lastModified": e.ChildText("#footer-info-lastmod"),
+		"contentType": "wikipedia-article",
+	}
+	
+	// Extract table of contents sections
+	var sections []string
+	e.ForEach(".toc ul li", func(_ int, subEl *colly.HTMLElement) {
+		sections = append(sections, subEl.Text)
+	})
+	
+	if len(sections) > 0 {
+		metadata["sections"] = strings.Join(sections, ", ")
+	}
+	
+	// Get infobox data if available
+	e.ForEach(".infobox tr", func(_ int, row *colly.HTMLElement) {
+		label := strings.TrimSpace(row.ChildText("th"))
+		value := strings.TrimSpace(row.ChildText("td"))
+		if label != "" && value != "" {
+			metadata[label] = value
+		}
+	})
+	
+	metadataJSON, _ := json.Marshal(metadata)
+	
+	// Skip if essential info is missing
+	if title == "" || url == "" {
+		return
+	}
+	
+	// Create a new ScrapedItem
+	item := models.ScrapedItem{
+		Title:       title,
+		Description: description,
+		URL:         url,
+		ImageURL:    imageURL,
+		Price:       0.0, // Wikipedia articles don't have prices
+		ScrapedAt:   time.Now(),
+		Metadata:    string(metadataJSON),
+	}
+	
+	// Save to database only if it's a new URL
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+	
+	result := db.DB.Where(models.ScrapedItem{URL: url}).FirstOrCreate(&item)
+	if result.Error != nil {
+		log.Printf("Error saving Wikipedia article %s: %v", url, result.Error)
+		return
+	}
+	
+	if result.RowsAffected > 0 {
+		// It's a new item
+		ctx.processedItems++
+		log.Printf("Saved new Wikipedia article: %s", title)
+	}
 }
 
 // extractProductData extracts product data from an HTML element
@@ -354,8 +490,17 @@ func getFirstNonEmptyAttr(e *colly.HTMLElement, attr string, selectors ...string
 
 // IsScrapingInProgress checks if scraping is currently active
 func IsScrapingInProgress() bool {
-	scrapeComplete <- false
-	return scraping
+	scrapingMutex.Lock()
+	result := scraping
+	scrapingMutex.Unlock()
+	return result
+}
+
+// ResetScrapingState resets the scraping state (mainly for testing)
+func ResetScrapingState() {
+	scrapingMutex.Lock()
+	scraping = false
+	scrapingMutex.Unlock()
 }
 
 // GetScrapedItems retrieves items from the database with simple limit
