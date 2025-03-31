@@ -1,107 +1,179 @@
 # Scrape-N-Serve
 
-A microservice application that demonstrates web scraping using Golang and a React Native front-end.
+A microservice application that demonstrates web scraping using Golang and a React frontend.
 
 ## Project Overview
 
 Scrape-N-Serve is a web scraping microservice that:
 
--   Scrapes target websites using Golang's Colly library
--   Stores data in a PostgreSQL database
--   Exposes RESTful API endpoints
--   Provides a React Native frontend for triggering scraping and viewing results
+- Scrapes target websites using Golang's Colly library
+- Handles Wikipedia pages with specialized extraction logic
+- Stores data in a PostgreSQL database
+- Exposes RESTful API endpoints
+- Provides a React frontend for triggering scraping and viewing results
 
 ## Tech Stack
 
 ### Backend
 
--   Language: Go (Golang)
--   Web Framework: Gin
--   Scraping Library: Colly
--   Database: PostgreSQL
--   ORM: GORM
+- Language: Go (Golang)
+- Web Framework: Gin
+- Scraping Library: Colly
+- Database: PostgreSQL
+- ORM: GORM
 
 ### Frontend
 
--   Framework: React Native
--   Language: TypeScript
--   State Management: Redux Toolkit
+- Framework: React
+- Bundler: Parcel
+- Language: TypeScript
+- State Management: Redux Toolkit
+- Routing: React Router
 
 ### DevOps
 
--   Docker & Docker Compose for containerization
+- Docker & Docker Compose for containerization
+- Nginx for serving static files and API proxying
+- Makefile for simplified operation
 
 ## Getting Started
 
 ### Prerequisites
 
--   Docker and Docker Compose
--   Node.js (v16+) and npm/yarn
--   Go (v1.21+) for local development
+- Docker and Docker Compose
+- Node.js (v16+) and npm (for local frontend development)
+- Go (v1.21+) (for local backend development)
 
-### Backend Setup
+### Quick Start with Docker
 
-1. Clone the repository:
+The easiest way to run the application is using Docker Compose:
 
-    ```
-    git clone https://github.com/BearHuddleston/scrape-n-serve.git
-    cd scrape-n-serve
-    ```
+```bash
+# Clone the repository
+git clone https://github.com/BearHuddleston/scrape-n-serve.git
+cd scrape-n-serve
 
-2. Run using Docker Compose:
+# Start the application using Make
+make up
 
-    ```
-    docker-compose up
-    ```
+# Or with docker-compose directly
+docker-compose up -d
+```
 
-3. For local development:
-    ```
-    cd backend
-    go run main.go
-    ```
+This will start three containers:
+- PostgreSQL database
+- Go backend API
+- React frontend with Nginx
 
-### Frontend Setup
+### Using the Makefile
 
-1. Install dependencies:
+The project includes a Makefile with helpful commands for Docker operations:
 
-    ```
-    cd frontend
-    npm install
-    ```
+```bash
+# Show available commands
+make help
 
-2. Start the development server:
+# Basic operations
+make build        # Build all containers
+make up           # Start the application in detached mode
+make down         # Stop the application
+make restart      # Restart the application
+make logs         # Show logs from all containers
 
-    ```
-    npm start
-    ```
+# Deployment
+make update       # Pull latest code and rebuild containers
+make deploy       # Deploy the application (pull, build, restart)
 
-3. Follow the Expo instructions to run on a device or emulator
+# Development
+make dev-setup    # Setup development environment
+make test         # Run backend tests
+```
+
+### Local Development
+
+#### Backend Setup
+
+```bash
+cd backend
+
+# Install dependencies
+go mod download
+
+# Run the application
+go run main.go
+```
+
+#### Frontend Setup
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm start
+
+# Build for production
+npm run build
+```
+
+## Using the Application
+
+1. Access the frontend at http://localhost
+2. Enter a URL to scrape (Wikipedia pages work best)
+3. Set the scraping depth
+4. Click "Start Scraping"
+5. Navigate to the "Scraped Data" tab to view results
 
 ## API Endpoints
 
--   `POST /scrape` - Trigger a scraping process
--   `GET /data` - Retrieve scraped data
--   `GET /data/search` - Search through scraped data
--   `GET /data/stats` - Get scraping statistics
+### Scraping
+
+- `POST /api/v1/scrape` - Trigger a scraping process
+  - Body: `{ "url": "https://example.com", "max_depth": 2 }`
+  - Query params: `?url=https://example.com&max_depth=2`
+
+- `GET /api/v1/scrape/status` - Check scraping status
+
+### Data Retrieval
+
+- `GET /api/v1/data` - Get scraped data with pagination
+  - Query params: `?limit=10&offset=0&sort=scraped_at&order=desc`
+
+- `GET /api/v1/data/:id` - Get specific scraped item by ID
 
 ## Project Structure
 
 ```
 /project-root
     /backend
-        main.go
-        config.go
-        /handlers
-        /services
-        /models
-        /db
-        /utils
+        main.go             # Application entry point
+        config.go           # Configuration settings
+        /handlers           # API route handlers
+        /services           # Business logic including scraper
+        /models             # Data models
+        /db                 # Database connection and operations
+        /utils              # Utilities like logging
     /frontend
-        App.tsx
-        /components
-        /services
-    docker-compose.yml
+        /src                # React source code
+            /components     # UI components
+            App.tsx         # Main application component
+        /services           # API services and state management
+        /styles             # CSS files
+        index.html          # HTML entry point
+    Makefile                # Commands for build and deployment
+    docker-compose.yml      # Docker services configuration
 ```
+
+## Features
+
+- **Web Scraping**: Extract data from websites with configurable depth
+- **Wikipedia Support**: Special handling for Wikipedia page extraction
+- **Concurrent Scraping**: Parallel processing with rate limiting
+- **Modern UI**: Responsive React interface with pagination
+- **Docker Ready**: Fully containerized for easy deployment
+- **API First**: RESTful API design with clean separation of concerns
 
 ## License
 
