@@ -2,6 +2,7 @@ package db
 
 import (
 	"log"
+	"os"
 
 	"github.com/arkouda/scrape-n-serve/models"
 	"gorm.io/driver/postgres"
@@ -14,8 +15,11 @@ var (
 
 // Connect establishes connection to the database and performs automigration
 func Connect() error {
-	// Use the config from the main package
-	dsn := "postgres://postgres:postgres@localhost:5432/scrape_n_serve"
+	// Get database URL from environment variable or use default
+	dsn := os.Getenv("DB_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/scrape_n_serve"
+	}
 
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
