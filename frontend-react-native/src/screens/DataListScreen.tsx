@@ -9,7 +9,7 @@ import { DEFAULT_LIMIT, DEFAULT_OFFSET } from '../services/config';
 
 const DataListScreen: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { items, totalItems, loading } = useSelector((state: RootState) => state.data);
+  const { items, totalItems, loading, error } = useSelector((state: RootState) => state.data);
   
   const [refreshing, setRefreshing] = useState(false);
   const [limit] = useState(DEFAULT_LIMIT);
@@ -19,10 +19,12 @@ const DataListScreen: React.FC = () => {
 
   // Load data when component mounts
   useEffect(() => {
+    console.log('DataListScreen: Loading data with params:', { limit, offset, sort, order });
     loadData();
   }, [dispatch, limit, offset, sort, order]);
 
   const loadData = () => {
+    console.log('DataListScreen: Dispatching fetchScrapedData');
     dispatch(fetchScrapedData({ limit, offset, sort, order }));
   };
 
@@ -38,48 +40,68 @@ const DataListScreen: React.FC = () => {
     }
   };
 
-  const renderItem = ({ item }: { item: ScrapedItem }) => {
+  const renderItem = ({ item }: { item: any }) => {
+    if (!item) {
+      console.error('Received null or undefined item');
+      return null;
+    }
+
+    console.log('Rendering item:', item);
+    
     // Parse the metadata if it exists
     let metadata: any = {};
     if (item.metadata) {
       try {
-        metadata = JSON.parse(item.metadata);
+        if (typeof item.metadata === 'string') {
+          metadata = JSON.parse(item.metadata);
+        } else if (typeof item.metadata === 'object') {
+          metadata = item.metadata;
+        }
       } catch (error) {
         console.error('Error parsing metadata:', error);
       }
     }
 
-    const formattedDate = new Date(item.scraped_at).toLocaleString();
+    // Make sure we have a valid date
+    const scrapedAt = item.scraped_at || item.ScrapedAt || new Date().toISOString();
+    const formattedDate = new Date(scrapedAt).toLocaleString();
 
+    // Extract properties safely
+    const title = item.title || item.Title || "Untitled";
+    const description = item.description || item.Description || "";
+    const price = parseFloat(item.price || item.Price || 0);
+    const url = item.url || item.URL || "#";
+    const imageUrl = item.image_url || item.ImageURL || item.imageURL || "";
+    
     return (
       <Card style={styles.card}>
         <Card.Content>
-          <Title style={styles.title}>{item.title}</Title>
+          <Title style={styles.title}>{title}</Title>
           <View style={styles.dateRow}>
             <Text style={styles.date}>Scraped: {formattedDate}</Text>
-            {item.price > 0 && (
+            {price > 0 && (
               <Chip icon="currency-usd" style={styles.priceChip}>
-                ${item.price.toFixed(2)}
+                ${price.toFixed(2)}
               </Chip>
             )}
           </View>
 
-          {item.image_url && (
+          {imageUrl && (
             <View style={styles.imageContainer}>
               <Image 
-                source={{ uri: item.image_url }} 
+                source={{ uri: imageUrl }} 
                 style={styles.image} 
                 resizeMode="cover"
               />
             </View>
           )}
 
-          <Paragraph style={styles.description}>{item.description}</Paragraph>
+          <Paragraph style={styles.description}>{description}</Paragraph>
           
           <Button
             mode="outlined"
             icon="open-in-new"
-            onPress={() => Linking.openURL(item.url)}
+            onPress={() => Linking.openURL(url)}
             style={styles.linkButton}
           >
             View Source
@@ -122,28 +144,43 @@ const DataListScreen: React.FC = () => {
     );
   };
 
+  // Add debugging for render
+  console.log('DataListScreen rendering with items:', items?.length, 'loading:', loading, 'error:', error);
+
+  // Check if items is undefined or null
+  const safeItems = items || [];
+  
   return (
     <View style={styles.container}>
       <View style={styles.headerContainer}>
         <Title style={styles.headerTitle}>Scraped Data</Title>
         <Text style={styles.headerSubtitle}>
-          Showing {items.length} of {totalItems} items
+          Showing {safeItems.length} of {totalItems || 0} items
         </Text>
       </View>
 
-      <FlatList
-        data={items}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={renderEmptyComponent}
-        ListFooterComponent={renderFooter}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.2}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      />
+      {error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <Button onPress={loadData} mode="contained" style={styles.retryButton}>
+            Retry
+          </Button>
+        </View>
+      ) : (
+        <FlatList
+          data={safeItems}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          contentContainerStyle={styles.listContainer}
+          ListEmptyComponent={renderEmptyComponent}
+          ListFooterComponent={renderFooter}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.2}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        />
+      )}
     </View>
   );
 };
@@ -259,6 +296,22 @@ const styles = StyleSheet.create({
   footerText: {
     marginLeft: 8,
     color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorText: {
+    color: '#d32f2f',
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 8,
+    backgroundColor: '#2196F3',
   },
 });
 

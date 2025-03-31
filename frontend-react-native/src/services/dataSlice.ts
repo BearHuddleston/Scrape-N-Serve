@@ -23,8 +23,15 @@ const initialState: DataState = {
 export const fetchScrapedData = createAsyncThunk(
   'data/fetchScrapedData',
   async ({ limit, offset, sort, order }: { limit: number; offset: number; sort: string; order: string }) => {
-    const response = await apiService.getScrapedData(limit, offset, sort, order);
-    return response;
+    console.log('fetchScrapedData thunk called with params:', { limit, offset, sort, order });
+    try {
+      const response = await apiService.getScrapedData(limit, offset, sort, order);
+      console.log('fetchScrapedData received response:', response);
+      return response;
+    } catch (error) {
+      console.error('fetchScrapedData error:', error);
+      throw error;
+    }
   }
 );
 
@@ -57,15 +64,40 @@ const dataSlice = createSlice({
     builder
       // Fetch data cases
       .addCase(fetchScrapedData.pending, (state) => {
+        console.log('fetchScrapedData.pending reducer called');
         state.loading = true;
         state.error = null;
       })
-      .addCase(fetchScrapedData.fulfilled, (state, action: PayloadAction<DataResponse>) => {
+      .addCase(fetchScrapedData.fulfilled, (state, action: PayloadAction<any>) => {
+        console.log('fetchScrapedData.fulfilled reducer called with payload:', action.payload);
         state.loading = false;
-        state.items = action.payload.data;
-        state.totalItems = action.payload.total;
+        
+        if (action.payload && typeof action.payload === 'object') {
+          // Check if we have a valid response structure
+          if (action.payload.data && Array.isArray(action.payload.data)) {
+            // Standard response format
+            state.items = action.payload.data;
+            state.totalItems = action.payload.total || 0;
+            console.log('State updated with items:', state.items.length, 'total:', state.totalItems);
+          } else {
+            // Try to handle different response formats
+            const possibleData = action.payload.items || action.payload.results || [];
+            if (Array.isArray(possibleData) && possibleData.length > 0) {
+              state.items = possibleData;
+              state.totalItems = action.payload.total || action.payload.count || possibleData.length;
+              console.log('State updated with alternative data structure:', state.items.length);
+            } else {
+              console.error('Could not extract items from payload:', action.payload);
+              state.error = 'Invalid data format received from server';
+            }
+          }
+        } else {
+          console.error('Invalid payload structure:', action.payload);
+          state.error = 'Invalid data format received from server';
+        }
       })
       .addCase(fetchScrapedData.rejected, (state, action) => {
+        console.log('fetchScrapedData.rejected reducer called with error:', action.error);
         state.loading = false;
         state.error = action.error.message || 'Failed to fetch data';
       })
