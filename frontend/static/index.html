@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrape-N-Serve</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Scrape-N-Serve</h1>
+            <p>A web scraping and data serving platform</p>
+        </header>
+
+        <div class="card">
+            <h2>API Status</h2>
+            <div id="apiStatus" class="status">Checking API status...</div>
+            <button id="checkApi" class="button">Check API Status</button>
+        </div>
+        
+        <div class="card">
+            <h2>Start Scraping</h2>
+            <form id="scrapeForm">
+                <div class="form-group">
+                    <label for="url">URL to Scrape</label>
+                    <input type="url" id="url" name="url" placeholder="https://example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="maxDepth">Max Depth (optional)</label>
+                    <input type="number" id="maxDepth" name="maxDepth" min="1" max="10" placeholder="1">
+                </div>
+                <button type="submit" class="button">Start Scraping</button>
+            </form>
+            <div id="scrapeResult" class="result"></div>
+        </div>
+        
+        <div class="card">
+            <h2>Scraped Data</h2>
+            <button id="fetchData" class="button">Fetch Data</button>
+            <div id="dataContainer" class="data-container">
+                <div id="dataStats" class="data-stats"></div>
+                <div id="dataList" class="data-list"></div>
+                <div id="pagination" class="pagination"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -57,7 +57,13 @@ func StartScraping(c *gin.Context) {
 
 	// Start scraping in a goroutine
 	go func() {
-		_, err := services.StartScraping(req.URL)
+		// Set max depth if provided, otherwise use default
+		maxDepth := 2 // Default value
+		if req.MaxDepth > 0 {
+			maxDepth = req.MaxDepth
+		}
+		
+		_, err := services.StartScraping(req.URL, maxDepth)
 		if err != nil {
 			logger.Error("Error during scraping: %v", err)
 		}

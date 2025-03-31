@@ -41,8 +41,8 @@ export interface DataStats {
   latest_scrape: string;
 }
 
-// Use the v1 API prefix
-const API_PREFIX = '/api/v1';
+// Use the v1 API prefix (which is now handled by the nginx proxy)
+const API_PREFIX = '';
 
 // Trigger scraping process
 export async function triggerScraping(url: string, maxDepth?: number): Promise<ApiResponse> {

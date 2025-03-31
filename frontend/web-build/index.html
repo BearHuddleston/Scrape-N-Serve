@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrape-N-Serve</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .api-status {
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            color: #2e7d32;
+        }
+        .error {
+            background-color: #ffebee;
+            border: 1px solid #ffcdd2;
+            color: #c62828;
+        }
+        button {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #388e3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Scrape-N-Serve</h1>
+        <p>Welcome to the Scrape-N-Serve application. This is a simple web scraper and data serving platform.</p>
+        
+        <h2>Backend API Status</h2>
+        <button onclick="checkApiStatus()">Check API Status</button>
+        <div id="apiStatus" class="api-status"></div>
+        
+        <h2>API Endpoints</h2>
+        <ul>
+            <li><a href="http://localhost:8080/health" target="_blank">Health Check</a></li>
+            <li><a href="http://localhost:8080/api/v1/data" target="_blank">Get Scraped Data</a></li>
+            <li><a href="http://localhost:8080/api/v1/data/stats" target="_blank">Get Stats</a></li>
+        </ul>
+    </div>
+
+    <script>
+        function checkApiStatus() {
+            const statusDiv = document.getElementById('apiStatus');
+            statusDiv.innerHTML = 'Checking API status...';
+            statusDiv.className = 'api-status';
+            
+            fetch('http://localhost:8080/health')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    statusDiv.innerHTML = `API is up and running! Server time: ${new Date(data.time).toLocaleString()}`;
+                    statusDiv.className = 'api-status success';
+                })
+                .catch(error => {
+                    statusDiv.innerHTML = `Failed to connect to API: ${error.message}`;
+                    statusDiv.className = 'api-status error';
+                });
+        }
+    </script>
+</body>
+</html>
