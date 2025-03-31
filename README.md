@@ -1,6 +1,6 @@
 # Scrape-N-Serve
 
-A microservice application that demonstrates web scraping using Golang and a React frontend.
+A microservice application that demonstrates web scraping using Golang with both React and React Native frontends.
 
 ## Project Overview
 
@@ -10,7 +10,7 @@ Scrape-N-Serve is a web scraping microservice that:
 - Handles Wikipedia pages with specialized extraction logic
 - Stores data in a PostgreSQL database
 - Exposes RESTful API endpoints
-- Provides a React frontend for triggering scraping and viewing results
+- Provides both React and React Native frontends for triggering scraping and viewing results
 
 ## Tech Stack
 
@@ -22,18 +22,27 @@ Scrape-N-Serve is a web scraping microservice that:
 - Database: PostgreSQL
 - ORM: GORM
 
-### Frontend
+### Frontend Options
 
+#### Standard Web Frontend
 - Framework: React
 - Bundler: Parcel
 - Language: TypeScript
 - State Management: Redux Toolkit
 - Routing: React Router
 
+#### React Native Frontend
+- Framework: React Native + Expo
+- Language: TypeScript
+- State Management: Redux Toolkit
+- UI Components: React Native Paper
+- Web Support: Expo Web
+
 ### DevOps
 
 - Docker & Docker Compose for containerization
-- Nginx for serving static files and API proxying
+- Express & HTTP Proxy Middleware for API proxying (React Native)
+- Nginx for serving static files and API proxying (Standard React)
 - Makefile for simplified operation
 
 ## Getting Started
@@ -105,6 +114,7 @@ go run main.go
 
 #### Frontend Setup
 
+##### Standard React Frontend
 ```bash
 cd frontend
 
@@ -118,13 +128,50 @@ npm start
 npm run build
 ```
 
+##### React Native Frontend
+```bash
+cd frontend-react-native
+
+# Install dependencies
+npm install
+
+# Start the development server for web
+npm run web
+
+# Start for iOS simulator (macOS only)
+npm run ios
+
+# Start for Android emulator
+npm run android
+
+# Build for production web
+npm run build:web
+```
+
 ## Using the Application
 
-1. Access the frontend at http://localhost
+1. Access the frontend at http://localhost 
+   - The Docker setup defaults to using the React Native web frontend
+   - Use the `switch-frontend.sh` script to toggle between frontends
 2. Enter a URL to scrape (Wikipedia pages work best)
 3. Set the scraping depth
 4. Click "Start Scraping"
 5. Navigate to the "Scraped Data" tab to view results
+
+### Switching Frontends
+
+The project includes two frontend implementations. To switch between them:
+
+```bash
+# Make the script executable (first time only)
+chmod +x switch-frontend.sh
+
+# Switch to React Native frontend
+./switch-frontend.sh native
+
+# Switch to standard React frontend
+./switch-frontend.sh standard
+```
 
 ## API Endpoints
 
@@ -162,8 +209,17 @@ npm run build
         /services           # API services and state management
         /styles             # CSS files
         index.html          # HTML entry point
+    /frontend-react-native
+        App.tsx             # Main React Native application component
+        /src                # React Native source code
+            /components     # UI components
+            /screens        # Screen components
+            /navigation     # Navigation configuration
+            /services       # API services and Redux state management
+        server.js           # Express server for web hosting and API proxying
     Makefile                # Commands for build and deployment
     docker-compose.yml      # Docker services configuration
+    switch-frontend.sh      # Script to switch between frontend implementations
 ```
 
 ## Features
@@ -171,9 +227,12 @@ npm run build
 - **Web Scraping**: Extract data from websites with configurable depth
 - **Wikipedia Support**: Special handling for Wikipedia page extraction
 - **Concurrent Scraping**: Parallel processing with rate limiting
-- **Modern UI**: Responsive React interface with pagination
+- **Multiple Frontends**: Choose between standard React or React Native
+- **Cross-Platform**: Run on web, iOS, and Android with React Native
+- **Modern UI**: Responsive interface with Material Design components
 - **Docker Ready**: Fully containerized for easy deployment
 - **API First**: RESTful API design with clean separation of concerns
+- **Robust Data Handling**: Resilient against varying data formats
 
 ## License
 
