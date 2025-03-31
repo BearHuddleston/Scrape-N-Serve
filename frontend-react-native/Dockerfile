@@ -1,4 +1,4 @@
-FROM node:18 AS builder
+FROM node:18
 
 WORKDIR /app
 
@@ -15,28 +15,25 @@ COPY tsconfig.json ./
 # Install dependencies 
 RUN npm install
 
+# Install web dependencies
+RUN npm install react-dom@18.3.1 react-native-web@~0.19.13 @expo/metro-runtime@~4.0.1 express http-proxy-middleware
+
 # Copy app source
 COPY app.json ./
 COPY App.tsx ./
 COPY src ./src
 COPY assets ./assets
+COPY index.ts ./
+COPY server.js ./
 
 # Update API URL for production
 RUN sed -i 's|http://10.0.2.2:8080|/api|g' ./src/services/config.ts
 
-# Build static version for web
-RUN npx expo export:web
-
-# Stage 2: Use Nginx to serve the static files
-FROM nginx:alpine
-
-# Copy the built app from the previous stage
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy custom nginx configuration - use the same as main frontend
-COPY ../frontend/nginx.conf /etc/nginx/conf.d/default.conf
+# Build for web
+RUN npx expo export -p web
 
 # Expose port 80
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Start the server
+CMD ["node", "server.js"]
