@@ -17,11 +17,22 @@ const DataListScreen: React.FC = () => {
   const [sort] = useState('scraped_at');
   const [order] = useState('desc');
 
-  // Load data when component mounts
+  // Get scraping status from the store
+  const { scraping, loading: scrapingLoading } = useSelector((state: RootState) => state.data);
+  
+  // Load data when component mounts or when needed
   useEffect(() => {
     console.log('DataListScreen: Loading data with params:', { limit, offset, sort, order });
     loadData();
   }, [dispatch, limit, offset, sort, order]);
+  
+  // Auto-refresh when scraping completes
+  useEffect(() => {
+    if (!scraping && !scrapingLoading) {
+      // This is either initial state or scraping just completed
+      loadData();
+    }
+  }, [scraping, scrapingLoading, dispatch]);
 
   const loadData = () => {
     console.log('DataListScreen: Dispatching fetchScrapedData');

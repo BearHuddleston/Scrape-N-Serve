@@ -35,6 +35,18 @@ const HomeScreen: React.FC = () => {
       if (intervalId) clearInterval(intervalId);
     };
   }, [scraping, dispatch]);
+  
+  // Watch for changes in scraping status to update the result
+  useEffect(() => {
+    // If scraping was active but now has stopped, update the result status
+    if (result && result.status === "success" && !scraping && result.message === "Scraping started") {
+      // Update the result status
+      setResult({
+        ...result,
+        message: "Scraping completed successfully"
+      });
+    }
+  }, [scraping, result]);
 
   // Show error if there is one
   useEffect(() => {
