@@ -118,17 +118,8 @@ const dataSlice = createSlice({
 
       // Fetch status cases
       .addCase(fetchScrapingStatus.fulfilled, (state, action) => {
-        // If scraping was active and is now inactive, we need to refresh data
-        const wasScrapingJustCompleted = state.scraping && !action.payload.scraping;
-        
-        // Update scraping status
+        // Just update the scraping status - component will handle refresh
         state.scraping = action.payload.scraping;
-        
-        // If scraping just completed, fetch the latest data
-        if (wasScrapingJustCompleted) {
-          // This will trigger a data refresh when scraping completes
-          state.loading = true;
-        }
       });
   },
 });

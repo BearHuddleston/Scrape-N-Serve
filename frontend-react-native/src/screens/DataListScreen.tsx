@@ -26,13 +26,20 @@ const DataListScreen: React.FC = () => {
     loadData();
   }, [dispatch, limit, offset, sort, order]);
   
-  // Auto-refresh when scraping completes
+  // Auto-refresh when scraping completes - only track when scraping changes from true to false
   useEffect(() => {
-    if (!scraping && !scrapingLoading) {
-      // This is either initial state or scraping just completed
+    // Store previous scraping state
+    const prevScrapingRef = React.useRef(scraping);
+    
+    // Only refresh data when scraping transitions from true to false (just completed)
+    if (prevScrapingRef.current === true && scraping === false) {
+      console.log('DataListScreen: Scraping just completed, refreshing data');
       loadData();
     }
-  }, [scraping, scrapingLoading, dispatch]);
+    
+    // Update the ref with current value for next render
+    prevScrapingRef.current = scraping;
+  }, [scraping, dispatch]);
 
   const loadData = () => {
     console.log('DataListScreen: Dispatching fetchScrapedData');
