@@ -34,6 +34,7 @@ help:
 	@echo "  make shell SERVICE=<service> - Execute shell in a container"
 	@echo "  make service-logs SERVICE=<service> - View logs for a specific service"
 	@echo "  make db-backup    - Backup the database"
+	@echo "  make db-clear     - Clear all data from the database"
 
 # Build all Docker containers
 .PHONY: build
@@ -134,6 +135,13 @@ db-backup:
 	@TIMESTAMP=$$(date +%Y%m%d_%H%M%S); \
 	docker-compose exec db pg_dump -U postgres -d scrape_n_serve > ./backups/scrape_n_serve_$$TIMESTAMP.sql
 	@echo "Backup saved to ./backups/"
+
+# Clear all data from database
+.PHONY: db-clear
+db-clear:
+	@echo "Clearing all data from the database..."
+	@docker-compose exec db psql -U postgres -d scrape_n_serve -c "DELETE FROM scraped_items;"
+	@echo "All data cleared successfully"
 
 # Setup development environment
 .PHONY: dev-setup
