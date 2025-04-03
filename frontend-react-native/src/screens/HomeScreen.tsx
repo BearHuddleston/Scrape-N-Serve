@@ -36,11 +36,11 @@ const HomeScreen: React.FC = () => {
     };
   }, [scraping, dispatch]);
   
+  // Store previous scraping state in a ref that persists across renders
+  const prevScrapingRef = React.useRef(scraping);
+  
   // Watch for changes in scraping status to update the result
   useEffect(() => {
-    // Store previous scraping state
-    const prevScrapingRef = React.useRef(scraping);
-    
     // If scraping transitions from true to false (just completed)
     if (prevScrapingRef.current === true && scraping === false) {
       // Keep the result card visible with a completion message
