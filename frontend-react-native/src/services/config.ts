@@ -9,9 +9,9 @@ export const API_URL = 'http://10.0.2.2:8080';
 
 // API endpoints
 export const ENDPOINTS = {
-  SCRAPE: '/api/scrape',
-  SCRAPE_STATUS: '/api/scrape/status',
-  DATA: '/api/data',
+  SCRAPE: '/api/v1/scrape',
+  SCRAPE_STATUS: '/api/v1/scrape/status',
+  DATA: '/api/v1/data',
 };
 
 // Default pagination values

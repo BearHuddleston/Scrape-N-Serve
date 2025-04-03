@@ -15,7 +15,17 @@ app.use('/api', createProxyMiddleware({
 app.use(express.static('dist'));
 
 // Serve the React app for any route not handled by static files
-app.get('*', (req, res) => {
+// Using explicit routes instead of the wildcard to avoid path-to-regexp issues
+app.get('/', (req, res) => {
+  res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+});
+
+app.get('/data', (req, res) => {
+  res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+});
+
+// Catch-all route as fallback
+app.use((req, res) => {
   res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
 });
 

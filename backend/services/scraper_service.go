@@ -76,12 +76,8 @@ func StartScraping(targetURL string, maxDepth int) (bool, error) {
 		config.MaxDepth = maxDepth
 	}
 	
-	// For Wikipedia, we don't restrict to just the hostname to allow following links to other language editions
-	if strings.Contains(domain, "wikipedia.org") {
-		config.AllowedDomains = []string{"wikipedia.org", "en.wikipedia.org", "www.wikipedia.org"}
-	} else {
-		config.AllowedDomains = []string{domain}
-	}
+	// Set allowed domains to just the target domain to avoid crawling beyond it
+	config.AllowedDomains = []string{domain}
 	
 	// Initialize the collector with the domain
 	c := initializeCollector(config)
@@ -183,23 +179,20 @@ func initializeCollector(config ScraperConfig) *colly.Collector {
 // setupProductPageCallbacks sets up callbacks for product pages
 func setupProductPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 	// This selector should be adjusted based on the target site's structure
-	c.OnHTML("div.product, div.product-detail, div.item", func(e *colly.HTMLElement) {
+	c.OnHTML("div.product, div.product-detail, div.item, article, .product", func(e *colly.HTMLElement) {
 		extractProductData(e, ctx)
 	})
 	
-	// Add Wikipedia-specific selectors
-	c.OnHTML("body", func(e *colly.HTMLElement) {
-		// If it's a Wikipedia page, extract data using Wikipedia-specific logic
-		if strings.Contains(e.Request.URL.Host, "wikipedia.org") {
-			extractWikipediaData(e, ctx)
-		}
+	// Extract data from main content areas
+	c.OnHTML("main, #content, #main-content, .content", func(e *colly.HTMLElement) {
+		extractGenericContentData(e, ctx)
 	})
 }
 
 // setupListingPageCallbacks sets up callbacks for listing/category pages
 func setupListingPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 	// Handle pagination links
-	c.OnHTML("a.page, a.pagination__item, .pagination a", func(e *colly.HTMLElement) {
+	c.OnHTML("a.page, a.pagination__item, .pagination a, nav a", func(e *colly.HTMLElement) {
 		pageURL := e.Request.AbsoluteURL(e.Attr("href"))
 		if pageURL != "" && !ctx.visitedURLs[pageURL] {
 			e.Request.Visit(pageURL)
@@ -207,7 +200,7 @@ func setupListingPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 	})
 	
 	// Handle product links in listing pages
-	c.OnHTML("a.product-link, a.product-item, .product-grid a", func(e *colly.HTMLElement) {
+	c.OnHTML("a.product-link, a.product-item, .product-grid a, .products a, article a", func(e *colly.HTMLElement) {
 		productURL := e.Request.AbsoluteURL(e.Attr("href"))
 		if productURL != "" {
 			ctx.mu.Lock()
@@ -221,13 +214,11 @@ func setupListingPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 		}
 	})
 	
-	// Handle Wikipedia links
-	c.OnHTML(".mw-parser-output a[href]", func(e *colly.HTMLElement) {
+	// Handle generic internal links
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 		href := e.Attr("href")
-		// Only follow internal Wikipedia links that don't start with # (anchors), : (special pages), or / (root paths)
-		if strings.HasPrefix(href, "/wiki/") && 
-		   !strings.Contains(href, ":") && 
-		   !strings.HasPrefix(href, "#") {
+		// Only follow internal links
+		if isInternalLink(href, e.Request.URL.String()) {
 			linkURL := e.Request.AbsoluteURL(href)
 			ctx.mu.Lock()
 			if !ctx.visitedURLs[linkURL] {
@@ -245,16 +236,14 @@ func setupListingPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 func setupGenericPageCallbacks(c *colly.Collector, ctx *scrapingContext) {
 	// Try to detect product information on any page
 	c.OnHTML("body", func(e *colly.HTMLElement) {
-		// Check if it's a Wikipedia page first
-		if strings.Contains(e.Request.URL.Host, "wikipedia.org") {
-			extractWikipediaData(e, ctx)
+		// For product pages
+		if hasProductIndicators(e) {
+			extractProductData(e, ctx)
 			return
 		}
 		
-		// For non-Wikipedia pages, check for common product page indicators
-		if hasProductIndicators(e) {
-			extractProductData(e, ctx)
-		}
+		// For general content
+		extractGenericContentData(e, ctx)
 	})
 }
 
@@ -268,55 +257,163 @@ func hasProductIndicators(e *colly.HTMLElement) bool {
 	return hasPriceElement && (hasAddToCartButton || hasProductTitle)
 }
 
-// extractWikipediaData extracts content from Wikipedia pages
-func extractWikipediaData(e *colly.HTMLElement, ctx *scrapingContext) {
-	// Get the title of the Wikipedia article
-	title := e.ChildText("h1#firstHeading")
-	if title == "" {
-		title = e.ChildText("h1.firstHeading")
+// isInternalLink checks if a URL is an internal link on the same domain
+func isInternalLink(href string, currentURL string) bool {
+	// Skip empty links, javascript links, and anchor links
+	if href == "" || strings.HasPrefix(href, "javascript:") || strings.HasPrefix(href, "#") {
+		return false
 	}
 	
+	// Always follow relative links
+	if strings.HasPrefix(href, "/") {
+		return true
+	}
+	
+	// Check if the link is to the same domain
+	parsedHref, err := url.Parse(href)
+	if err != nil {
+		return false
+	}
+	
+	parsedCurrentURL, err := url.Parse(currentURL)
+	if err != nil {
+		return false
+	}
+	
+	// If the hostname is empty, it's a relative URL (already handled above)
+	if parsedHref.Hostname() == "" {
+		return true
+	}
+	
+	// Check if the hostnames match
+	return parsedHref.Hostname() == parsedCurrentURL.Hostname()
+}
+
+// extractGenericContentData extracts content from generic pages
+func extractGenericContentData(e *colly.HTMLElement, ctx *scrapingContext) {
+	// Get the title from various common selectors
+	title := getFirstNonEmpty(e,
+		"h1",
+		"title",
+		"meta[property='og:title']",
+		"meta[name='title']",
+		".title",
+		".page-title",
+	)
+	
+	// For meta tags, we need to get the content attribute
+	if title == "" {
+		title = e.ChildAttr("meta[property='og:title']", "content")
+		if title == "" {
+			title = e.ChildAttr("meta[name='title']", "content")
+		}
+	}
+
 	// Get URL from the current page
 	url := e.Request.URL.String()
 	
-	// Get description from the first paragraph
-	description := e.ChildText("#mw-content-text p:first-of-type")
+	// Get description from various common selectors
+	description := getFirstNonEmpty(e,
+		"meta[name='description']",
+		"meta[property='og:description']",
+		".description",
+		"p:first-of-type",
+		"article p:first-of-type",
+		".summary",
+	)
 	
-	// Get the first image
-	imageURL := e.ChildAttr(".infobox img, .thumbimage, img.mw-headline-anchor", "src")
+	// For meta description, try the content attribute
+	if description == "" {
+		description = e.ChildAttr("meta[name='description']", "content")
+		if description == "" {
+			description = e.ChildAttr("meta[property='og:description']", "content")
+		}
+	}
+	
+	// Get the first significant image
+	imageURL := getFirstNonEmptyAttr(e, "src",
+		"meta[property='og:image']",
+		".featured-image img",
+		"article img",
+		"header img",
+		".hero img",
+		".banner img",
+		"img",
+	)
+	
+	// For meta image, try the content attribute
+	if imageURL == "" {
+		imageURL = e.ChildAttr("meta[property='og:image']", "content")
+	}
+	
+	// For images, ensure we have absolute URLs
 	imageURL = e.Request.AbsoluteURL(imageURL)
 	
-	// If no image found in those selectors, try to find any image
-	if imageURL == "" {
-		imageURL = e.ChildAttr("img", "src")
-		imageURL = e.Request.AbsoluteURL(imageURL)
-	}
-	
-	// Gather metadata
+	// Gather metadata using schema.org or Open Graph tags
 	metadata := map[string]string{
-		"categories": strings.Join(e.ChildTexts("#mw-normal-catlinks li"), ", "),
-		"lastModified": e.ChildText("#footer-info-lastmod"),
-		"contentType": "wikipedia-article",
+		"contentType": "article",
+		"domain": e.Request.URL.Hostname(),
+		"path": e.Request.URL.Path,
 	}
 	
-	// Extract table of contents sections
-	var sections []string
-	e.ForEach(".toc ul li", func(_ int, subEl *colly.HTMLElement) {
-		sections = append(sections, subEl.Text)
-	})
-	
-	if len(sections) > 0 {
-		metadata["sections"] = strings.Join(sections, ", ")
-	}
-	
-	// Get infobox data if available
-	e.ForEach(".infobox tr", func(_ int, row *colly.HTMLElement) {
-		label := strings.TrimSpace(row.ChildText("th"))
-		value := strings.TrimSpace(row.ChildText("td"))
-		if label != "" && value != "" {
-			metadata[label] = value
+	// Extract Open Graph metadata
+	e.ForEach("meta[property^='og:']", func(_ int, elem *colly.HTMLElement) {
+		property := elem.Attr("property")
+		content := elem.Attr("content")
+		if property != "" && content != "" {
+			propName := strings.TrimPrefix(property, "og:")
+			metadata[propName] = content
 		}
 	})
+	
+	// Extract Twitter Card metadata
+	e.ForEach("meta[name^='twitter:']", func(_ int, elem *colly.HTMLElement) {
+		property := elem.Attr("name")
+		content := elem.Attr("content")
+		if property != "" && content != "" {
+			propName := strings.TrimPrefix(property, "twitter:")
+			metadata["twitter_"+propName] = content
+		}
+	})
+	
+	// Try to extract author info
+	author := getFirstNonEmpty(e,
+		"meta[name='author']",
+		".author",
+		".byline",
+		"[itemprop='author']",
+	)
+	
+	if author == "" {
+		author = e.ChildAttr("meta[name='author']", "content")
+	}
+	
+	if author != "" {
+		metadata["author"] = author
+	}
+	
+	// Try to extract date info
+	publishDate := getFirstNonEmpty(e,
+		"meta[property='article:published_time']",
+		"meta[itemprop='datePublished']",
+		"time",
+		".date",
+		".published-date",
+	)
+	
+	if publishDate == "" {
+		publishDate = e.ChildAttr("meta[property='article:published_time']", "content")
+		if publishDate == "" {
+			publishDate = e.ChildAttr("meta[itemprop='datePublished']", "content")
+			if publishDate == "" {
+				publishDate = e.ChildAttr("time", "datetime")
+			}
+		}
+	}
+	
+	if publishDate != "" {
+		metadata["publishDate"] = publishDate
+	}
 	
 	metadataJSON, _ := json.Marshal(metadata)
 	
@@ -331,7 +428,7 @@ func extractWikipediaData(e *colly.HTMLElement, ctx *scrapingContext) {
 		Description: description,
 		URL:         url,
 		ImageURL:    imageURL,
-		Price:       0.0, // Wikipedia articles don't have prices
+		Price:       0.0, // Most articles don't have prices
 		ScrapedAt:   time.Now(),
 		Metadata:    string(metadataJSON),
 	}
@@ -342,14 +439,14 @@ func extractWikipediaData(e *colly.HTMLElement, ctx *scrapingContext) {
 	
 	result := db.DB.Where(models.ScrapedItem{URL: url}).FirstOrCreate(&item)
 	if result.Error != nil {
-		log.Printf("Error saving Wikipedia article %s: %v", url, result.Error)
+		log.Printf("Error saving article %s: %v", url, result.Error)
 		return
 	}
 	
 	if result.RowsAffected > 0 {
 		// It's a new item
 		ctx.processedItems++
-		log.Printf("Saved new Wikipedia article: %s", title)
+		log.Printf("Saved new article: %s", title)
 	}
 }
 

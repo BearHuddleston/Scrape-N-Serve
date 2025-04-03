@@ -29,6 +29,9 @@ COPY server.js ./
 # Update API URL for production
 RUN sed -i 's|http://10.0.2.2:8080|/api|g' ./src/services/config.ts
 
+# Update API endpoints for production (v1 paths)
+RUN sed -i 's|/api/v1/|/api/|g' ./src/services/config.ts
+
 # Build for web
 RUN npx expo export -p web
 
