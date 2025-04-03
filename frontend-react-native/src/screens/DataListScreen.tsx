@@ -80,16 +80,37 @@ const DataListScreen: React.FC = () => {
       }
     }
 
-    // Make sure we have a valid date
-    const scrapedAt = item.scraped_at || item.ScrapedAt || new Date().toISOString();
-    const formattedDate = new Date(scrapedAt).toLocaleString();
+    // Handle various field mappings between camelCase and PascalCase
+    const fieldsMapping = {
+      // Field name in response: possible alternative field names
+      "scraped_at": ["scraped_at", "ScrapedAt", "scrapedAt", "created_at", "CreatedAt"],
+      "title": ["title", "Title", "name", "Name"],
+      "description": ["description", "Description", "desc", "Desc", "content", "Content"],
+      "price": ["price", "Price", "cost", "Cost", "value", "Value"],
+      "url": ["url", "URL", "Url", "link", "Link"],
+      "image_url": ["image_url", "ImageURL", "ImageUrl", "imageURL", "imageUrl", "image", "Image"],
+      "id": ["id", "ID", "Id", "_id", "identity"]
+    };
 
-    // Extract properties safely
-    const title = item.title || item.Title || "Untitled";
-    const description = item.description || item.Description || "";
-    const price = parseFloat(item.price || item.Price || 0);
-    const url = item.url || item.URL || "#";
-    const imageUrl = item.image_url || item.ImageURL || item.imageURL || "";
+    // Helper function to get the first valid value from an object based on possible field names
+    const getFieldValue = (obj: any, possibleFields: string[], defaultValue: any) => {
+      for (const field of possibleFields) {
+        if (obj[field] !== undefined) {
+          return obj[field];
+        }
+      }
+      return defaultValue;
+    };
+
+    // Extract all fields with fallbacks
+    const id = getFieldValue(item, fieldsMapping.id, Math.random().toString());
+    const scrapedAt = getFieldValue(item, fieldsMapping.scraped_at, new Date().toISOString());
+    const formattedDate = new Date(scrapedAt).toLocaleString();
+    const title = getFieldValue(item, fieldsMapping.title, "Untitled");
+    const description = getFieldValue(item, fieldsMapping.description, "");
+    const price = parseFloat(getFieldValue(item, fieldsMapping.price, 0));
+    const url = getFieldValue(item, fieldsMapping.url, "#");
+    const imageUrl = getFieldValue(item, fieldsMapping.image_url, "");
     
     return (
       <Card style={styles.card}>
@@ -166,7 +187,27 @@ const DataListScreen: React.FC = () => {
   console.log('DataListScreen rendering with items:', items?.length, 'loading:', loading, 'error:', error);
 
   // Check if items is undefined or null
-  const safeItems = items || [];
+  // Make sure items is always an array, even if the response structure is unexpected
+  let safeItems = [];
+  
+  // Handle different API response structures
+  if (Array.isArray(items)) {
+    safeItems = items;
+  } else if (items && typeof items === 'object') {
+    // If 'items' is actually a wrapped object with data field
+    if (Array.isArray(items.data)) {
+      safeItems = items.data;
+    }
+  }
+  
+  // Debug output to help identify issues
+  console.log('DataListScreen final items:', { 
+    originalItems: items, 
+    safeItems, 
+    totalItems, 
+    loading, 
+    error 
+  });
   
   return (
     <View style={styles.container}>
@@ -188,7 +229,13 @@ const DataListScreen: React.FC = () => {
         <FlatList
           data={safeItems}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          keyExtractor={(item) => {
+            // More robust key generation
+            if (item && (item.id || item.ID || item._id)) {
+              return String(item.id || item.ID || item._id);
+            }
+            return Math.random().toString();
+          }}
           contentContainerStyle={styles.listContainer}
           ListEmptyComponent={renderEmptyComponent}
           ListFooterComponent={renderFooter}

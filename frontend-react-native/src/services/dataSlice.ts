@@ -72,25 +72,23 @@ const dataSlice = createSlice({
         console.log('fetchScrapedData.fulfilled reducer called with payload:', action.payload);
         state.loading = false;
         
+        // Store the entire response in state for maximum flexibility
+        // This allows components to handle different API response structures
+        state.items = action.payload;
+        
         if (action.payload && typeof action.payload === 'object') {
-          // Check if we have a valid response structure
-          if (action.payload.data && Array.isArray(action.payload.data)) {
-            // Standard response format
-            state.items = action.payload.data;
-            state.totalItems = action.payload.total || 0;
-            console.log('State updated with items:', state.items.length, 'total:', state.totalItems);
-          } else {
-            // Try to handle different response formats
-            const possibleData = action.payload.items || action.payload.results || [];
-            if (Array.isArray(possibleData) && possibleData.length > 0) {
-              state.items = possibleData;
-              state.totalItems = action.payload.total || action.payload.count || possibleData.length;
-              console.log('State updated with alternative data structure:', state.items.length);
-            } else {
-              console.error('Could not extract items from payload:', action.payload);
-              state.error = 'Invalid data format received from server';
-            }
+          // Extract total items count for pagination
+          if (action.payload.total !== undefined) {
+            state.totalItems = action.payload.total;
+          } else if (action.payload.count !== undefined) {
+            state.totalItems = action.payload.count;
+          } else if (action.payload.data && Array.isArray(action.payload.data)) {
+            state.totalItems = action.payload.data.length;
+          } else if (Array.isArray(action.payload)) {
+            state.totalItems = action.payload.length;
           }
+          
+          console.log('State updated with payload, total items:', state.totalItems);
         } else {
           console.error('Invalid payload structure:', action.payload);
           state.error = 'Invalid data format received from server';

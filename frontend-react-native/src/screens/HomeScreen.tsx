@@ -38,14 +38,30 @@ const HomeScreen: React.FC = () => {
   
   // Watch for changes in scraping status to update the result
   useEffect(() => {
-    // If scraping was active but now has stopped, update the result status
-    if (result && result.status === "success" && !scraping && result.message === "Scraping started") {
-      // Update the result status
-      setResult({
-        ...result,
-        message: "Scraping completed successfully"
-      });
+    // Store previous scraping state
+    const prevScrapingRef = React.useRef(scraping);
+    
+    // If scraping transitions from true to false (just completed)
+    if (prevScrapingRef.current === true && scraping === false) {
+      // Keep the result card visible with a completion message
+      if (result) {
+        setResult({
+          ...result,
+          message: "Scraping completed successfully"
+        });
+      } else {
+        // In case result is null but scraping just finished
+        setResult({
+          status: "success",
+          message: "Scraping completed successfully",
+          url: "N/A",
+          time: new Date().toISOString()
+        });
+      }
     }
+    
+    // Update the ref with current value for next render
+    prevScrapingRef.current = scraping;
   }, [scraping, result]);
 
   // Show error if there is one
