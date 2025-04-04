@@ -22,15 +22,6 @@ Scrape-N-Serve is a web scraping microservice that:
 - Database: PostgreSQL
 - ORM: GORM
 
-### Frontend Options
-
-#### Standard Web Frontend
-- Framework: React
-- Bundler: Parcel
-- Language: TypeScript
-- State Management: Redux Toolkit
-- Routing: React Router
-
 #### React Native Frontend
 - Framework: React Native + Expo
 - Language: TypeScript
@@ -114,23 +105,9 @@ go run main.go
 
 #### Frontend Setup
 
-##### Standard React Frontend
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm start
-
-# Build for production
-npm run build
-```
-
 ##### React Native Frontend
 ```bash
-cd frontend-react-native
+cd frontend
 
 # Install dependencies
 npm install
@@ -151,27 +128,10 @@ npm run build:web
 ## Using the Application
 
 1. Access the frontend at http://localhost 
-   - The Docker setup defaults to using the React Native web frontend
-   - Use the `switch-frontend.sh` script to toggle between frontends
 2. Enter a URL to scrape (Wikipedia pages work best)
 3. Set the scraping depth
 4. Click "Start Scraping"
 5. Navigate to the "Scraped Data" tab to view results
-
-### Switching Frontends
-
-The project includes two frontend implementations. To switch between them:
-
-```bash
-# Make the script executable (first time only)
-chmod +x switch-frontend.sh
-
-# Switch to React Native frontend
-./switch-frontend.sh native
-
-# Switch to standard React frontend
-./switch-frontend.sh standard
-```
 
 ## API Endpoints
 
@@ -203,13 +163,6 @@ chmod +x switch-frontend.sh
         /db                 # Database connection and operations
         /utils              # Utilities like logging
     /frontend
-        /src                # React source code
-            /components     # UI components
-            App.tsx         # Main application component
-        /services           # API services and state management
-        /styles             # CSS files
-        index.html          # HTML entry point
-    /frontend-react-native
         App.tsx             # Main React Native application component
         /src                # React Native source code
             /components     # UI components
@@ -219,7 +172,6 @@ chmod +x switch-frontend.sh
         server.js           # Express server for web hosting and API proxying
     Makefile                # Commands for build and deployment
     docker-compose.yml      # Docker services configuration
-    switch-frontend.sh      # Script to switch between frontend implementations
 ```
 
 ## Features
@@ -227,7 +179,6 @@ chmod +x switch-frontend.sh
 - **Web Scraping**: Extract data from websites with configurable depth
 - **Wikipedia Support**: Special handling for Wikipedia page extraction
 - **Concurrent Scraping**: Parallel processing with rate limiting
-- **Multiple Frontends**: Choose between standard React or React Native
 - **Cross-Platform**: Run on web, iOS, and Android with React Native
 - **Modern UI**: Responsive interface with Material Design components
 - **Docker Ready**: Fully containerized for easy deployment

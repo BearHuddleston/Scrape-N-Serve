@@ -26,7 +26,7 @@ This React Native application provides a mobile interface to the Scrape-N-Serve 
 1. Clone the repository:
    ```bash
    git clone https://github.com/BearHuddleston/Scrape-N-Serve.git
-   cd Scrape-N-Serve/frontend-react-native
+   cd Scrape-N-Serve/frontend
    ```
 
 2. Install dependencies:
@@ -70,7 +70,7 @@ export const API_URL = 'http://10.0.2.2:8080';
 ### Project Structure
 
 ```
-frontend-react-native/
+frontend/
   ├── src/
   │   ├── components/       # Reusable UI components
   │   ├── screens/          # Main app screens

@@ -1,8 +1,8 @@
-FROM node:18 AS builder
+FROM node:18
 
 WORKDIR /app
 
-# Install dependencies for building the React app
+# Install dependencies for building the React Native web app
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -11,33 +11,32 @@ RUN apt-get update && apt-get install -y \
 # Copy package.json and package-lock.json
 COPY package*.json ./
 COPY tsconfig.json ./
-COPY .parcelrc ./
 
 # Install dependencies 
 RUN npm install
 
-# Copy frontend source
-COPY index.html ./
+# Install web dependencies
+RUN npm install react-dom@18.3.1 react-native-web@~0.19.13 @expo/metro-runtime@~4.0.1 express http-proxy-middleware
+
+# Copy app source
+COPY app.json ./
+COPY App.tsx ./
 COPY src ./src
-COPY services ./services
-COPY styles ./styles
+COPY assets ./assets
+COPY index.ts ./
+COPY server.js ./
 
 # Update API URL for production
-RUN sed -i 's|http://localhost:8080|/api|g' ./services/config.ts
+RUN sed -i 's|http://10.0.2.2:8080|/api|g' ./src/services/config.ts
 
-# Build for production with Parcel
-RUN npm run build
+# Update API endpoints for production (v1 paths)
+RUN sed -i 's|/api/v1/|/api/|g' ./src/services/config.ts
 
-# Stage 2: Use Nginx to serve the static files
-FROM nginx:alpine
-
-# Copy the built app from the previous stage
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Build for web
+RUN npx expo export -p web
 
 # Expose port 80
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Start the server
+CMD ["node", "server.js"]
