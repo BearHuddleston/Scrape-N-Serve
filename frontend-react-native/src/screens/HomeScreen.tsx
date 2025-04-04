@@ -47,13 +47,13 @@ const HomeScreen: React.FC = () => {
       if (result) {
         setResult({
           ...result,
-          message: "Scraping completed successfully"
+          message: "Scraping finished successfully"
         });
       } else {
         // In case result is null but scraping just finished
         setResult({
           status: "success",
-          message: "Scraping completed successfully",
+          message: "Scraping finished successfully",
           url: "N/A",
           time: new Date().toISOString()
         });
@@ -166,10 +166,9 @@ const HomeScreen: React.FC = () => {
             {result && (
               <Card style={styles.resultCard}>
                 <Card.Content>
-                  <Title>Scraping Started!</Title>
+                  <Title>{scraping ? "Scraping Started!" : "Scraping Finished!"}</Title>
                   <Paragraph>URL: {result.url}</Paragraph>
-                  <Paragraph>Status: {result.status}</Paragraph>
-                  <Paragraph>Message: {result.message}</Paragraph>
+                  <Paragraph>{result.message}</Paragraph>
                 </Card.Content>
               </Card>
             )}

@@ -43,7 +43,7 @@ const HomeScreen: React.FC = () => {
               clearInterval(statusInterval);
               setResult({ 
                 status: 'success', 
-                message: 'Scraping completed! Click "View Scraped Data" to see results.' 
+                message: 'Scraping Finished! Click "View Scraped Data" to see results.' 
               });
             }
           } catch (error) {
